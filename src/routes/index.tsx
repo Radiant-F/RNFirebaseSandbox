@@ -13,26 +13,29 @@ import {
   PostDetail,
 } from '../screens';
 import {RootStackParamList} from './types';
+import {FirebaseAuthTypes} from '@react-native-firebase/auth';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export default function RootStack() {
+export default function RootStack({
+  user,
+}: {
+  user: FirebaseAuthTypes.User | null;
+}) {
   return (
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
         animation: 'fade',
         contentStyle: {backgroundColor: 'transparent'},
-        statusBarTranslucent: true,
-        statusBarColor: 'transparent',
-        statusBarStyle: 'light',
       }}
-      initialRouteName="Splash">
+      initialRouteName={user ? 'Home' : 'Authentication'}>
       <Stack.Screen name="Splash" component={Splash} />
+      <Stack.Screen name="Demo" component={Demo} />
+
       <Stack.Screen name="Authentication" component={Authentication} />
       <Stack.Screen name="Home" component={Home} />
       <Stack.Screen name="UserProfile" component={UserProfile} />
-      <Stack.Screen name="Demo" component={Demo} />
       <Stack.Screen name="Task" component={Task} />
 
       <Stack.Screen name="Social" component={Social} />
