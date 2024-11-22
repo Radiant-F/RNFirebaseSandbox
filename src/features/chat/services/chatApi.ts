@@ -15,7 +15,9 @@ type ContactType = {
   status: string;
 };
 
-export function useGetContacts(status: 'accepted' | 'declined' | 'requested') {
+export function useGetContacts(
+  status: 'accepted' | 'declined' | 'requested' | 'pending',
+) {
   const storedUser = useAppSelector(state => state.auth.user);
   const [loading, setLoading] = useState(true);
   const [contacts, setContacts] = useState<ContactType[]>([]);
@@ -23,39 +25,35 @@ export function useGetContacts(status: 'accepted' | 'declined' | 'requested') {
   useEffect(() => {
     async function getContacts() {
       try {
-        const snapshot = await firestore()
-          .collection('users')
-          .doc(storedUser.uid)
-          .collection('contacts')
-          .where('status', '==', status)
-          .get();
+        let query;
 
-        if (snapshot.empty) {
+        if (status == 'pending') {
+          query = firestore()
+            .collection('users')
+            .doc(storedUser.uid)
+            .collection('contacts')
+            .where('status', '==', 'pending')
+            .where('requestedBy', '==', storedUser.uid);
+        } else {
+          query = firestore()
+            .collection('users')
+            .doc(storedUser.uid)
+            .collection('contacts')
+            .where('status', '==', status);
+        }
+
+        const snapshot = await query.get();
+
+        if (!snapshot) {
           setContacts([]);
           setLoading(false);
           return;
         }
 
-        const contactList = await Promise.all(
-          snapshot.docs.map(async doc => {
-            const contactRef = firestore()
-              .collection('users')
-              .doc(storedUser.uid)
-              .collection('contacts')
-              .doc(doc.id);
-            // const contactRef = firestore().collection('users').doc(doc.id);
-            // const contactDoc = await contactRef.get();
-
-            return {
-              ...doc.data(),
-              contactId: doc.id,
-              displayName: (await contactRef.get()).data()?.displayName || '',
-              photo: (await contactRef.get()).data()?.photo || '',
-              // displayName: contactDoc.data()?.displayName || '',
-              // photo: contactDoc.data()?.photo || '',
-            } as ContactType;
-          }),
-        );
+        const contactList = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          contactId: doc.id,
+        })) as ContactType[];
 
         setContacts(contactList);
         setLoading(false);
@@ -67,6 +65,41 @@ export function useGetContacts(status: 'accepted' | 'declined' | 'requested') {
 
     getContacts();
   }, []);
+
+  return {contacts, loading};
+}
+
+export function useRealtimeGetContacts(
+  status: 'accepted' | 'declined' | 'requested' | 'pending',
+) {
+  const storedUser = useAppSelector(state => state.auth.user);
+  const [loading, setLoading] = useState(true);
+  const [contacts, setContacts] = useState<ContactType[]>([]);
+
+  useEffect(() => {
+    const unsubscribe = firestore()
+      .collection('users')
+      .doc(storedUser.uid)
+      .collection('contacts')
+      .where('status', '==', status)
+      .onSnapshot(snapshot => {
+        if (snapshot.empty) {
+          setContacts([]);
+          setLoading(false);
+          return;
+        }
+
+        const contactList = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          contactId: doc.id,
+        })) as ContactType[];
+
+        setContacts(contactList);
+        setLoading(false);
+      });
+
+    return () => unsubscribe();
+  }, [status]);
 
   return {contacts, loading};
 }
@@ -90,7 +123,7 @@ export function useRespondToContactRequest() {
         .collection('contacts')
         .doc(currentUid);
 
-      if (response == 'accepted') {
+      if (response === 'accepted') {
         batch.update(requesterRef, {status: 'accepted'});
 
         // Add the contact to the current user's contacts
@@ -105,20 +138,27 @@ export function useRespondToContactRequest() {
           displayName: requester.displayName,
           photo: requester.photo,
           status: 'accepted',
-          createdAt: new Date().toISOString(),
+          createdAt: firestore.FieldValue.serverTimestamp(),
         });
-      } else if (response == 'declined') {
+      } else if (response === 'declined') {
         batch.update(requesterRef, {status: 'declined'});
+
+        // Optionally, remove the declined request from the current user's list
+        const currentUserRef = firestore()
+          .collection('users')
+          .doc(currentUid)
+          .collection('contacts')
+          .doc(requester.contactId);
+
+        batch.update(currentUserRef, {status: 'declined'}); // Ensure status is updated locally
       }
 
       await batch.commit();
+
       setLoading(false);
-      console.log(
-        `successfully ${response} to contact ${requester.displayName}`,
-      );
     } catch (error) {
       setLoading(false);
-      console.log('error responding to contact request:', error);
+      console.log('Error responding to contact request:', error);
     }
   }
 
@@ -156,24 +196,29 @@ export function useAddContact() {
     try {
       const timestamp = new Date().toISOString();
 
+      // Data for the current user
       const currentUserContactData = {
         id: selectedContact.uid,
-        status: 'pending',
+        status: 'pending', // This user sees it as pending
         createdAt: timestamp,
-        displayName: storedUser.displayName,
-        photo: storedUser.photo,
+        displayName: selectedContact.displayName,
+        photo: selectedContact.photo,
+        requestedBy: storedUser.uid, // Tracks who initiated the request
       };
 
+      // Data for the contact user
       const contactUserContactData = {
         id: storedUser.uid,
-        status: 'requested', // the other side sees it as "requested"
+        status: 'requested', // The other side sees it as "requested"
         createdAt: timestamp,
         displayName: storedUser.displayName,
         photo: storedUser.photo,
+        requestedBy: storedUser.uid, // Tracks who initiated the request
       };
 
       const batch = firestore().batch();
 
+      // Reference for the current user's contact
       const currentUserRef = firestore()
         .collection('users')
         .doc(storedUser.uid)
@@ -181,6 +226,7 @@ export function useAddContact() {
         .doc(selectedContact.uid);
       batch.set(currentUserRef, currentUserContactData);
 
+      // Reference for the contact user's contact
       const contactUserRef = firestore()
         .collection('users')
         .doc(selectedContact.uid)
@@ -197,7 +243,8 @@ export function useAddContact() {
         [
           {
             text: 'Open Contact List',
-            onPress: () => navigation.navigate('ContactList'),
+            onPress: () =>
+              navigation.navigate('ContactList', {status: 'pending'}),
           },
           {text: 'Later'},
         ],
@@ -214,11 +261,14 @@ export function useAddContact() {
 export function useGetOrStartChat() {
   const storedUser = useAppSelector(state => state.auth.user);
   const [loading, setLoading] = useState(false);
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   async function getOrStartChat(contactId: string) {
     setLoading(true);
     try {
       const chatRef = firestore().collection('chats');
+      // fetch chats where both members are present
       const existingChat = await chatRef
         .where('members', 'array-contains', storedUser.uid)
         .get();
@@ -226,7 +276,8 @@ export function useGetOrStartChat() {
       // Check if a chat already exists between the two users
       let chatId = '';
       existingChat.docs.forEach(doc => {
-        if (doc.data().members.includes(contactId)) {
+        const members = doc.data().members;
+        if (members.includes(contactId)) {
           chatId = doc.id;
         }
       });
@@ -237,13 +288,12 @@ export function useGetOrStartChat() {
           members: [storedUser.uid, contactId],
           createdAt: firestore.FieldValue.serverTimestamp(),
           lastMessage: '',
-          lastMessageTimestamp: null,
+          lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
         });
         chatId = newChat.id;
       }
 
-      setLoading(false);
-      return chatId;
+      navigation.replace('ChatScreen', {chatId});
     } catch (error) {
       setLoading(false);
       console.log('error getting or starting chat:', error);
@@ -251,6 +301,50 @@ export function useGetOrStartChat() {
   }
 
   return {loading, getOrStartChat};
+}
+
+async function fetchUserDetails(uid: string) {
+  try {
+    const userDoc = await firestore().collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      const {displayName, photo} = userDoc.data() as UserType;
+      return {displayName, photo};
+    }
+  } catch (error) {
+    console.error('Error fetching user details:', error);
+  }
+  return {displayName: 'Unknown', photo: null}; // Default fallback
+}
+
+export function useOldChatList() {
+  const [chats, setChats] = useState<any[]>([]);
+  const storedUser = useAppSelector(state => state.auth.user);
+
+  useEffect(() => {
+    const unsubscribe = firestore()
+      .collection('chats')
+      .where('members', 'array-contains', storedUser.uid)
+      // .orderBy('lastMessageTimestamp', 'desc') // fix the null when creating a new chat
+      .onSnapshot(snapshot => {
+        if (!snapshot) return setChats([]);
+        const chatList = snapshot.docs
+          .map((doc: any) => ({
+            id: doc.id,
+            ...doc.data(),
+          }))
+          .sort(
+            // temporary fix for orderBy method
+            (a, b) =>
+              (b.lastMessageTimestamp?.toDate?.() || 0) -
+              (a.lastMessageTimestamp?.toDate?.() || 0),
+          ); // Sort in memory to handle null timestamps
+        setChats(chatList);
+      });
+
+    return () => unsubscribe();
+  }, []);
+
+  return {chats};
 }
 
 export function useChatList() {
@@ -261,14 +355,33 @@ export function useChatList() {
     const unsubscribe = firestore()
       .collection('chats')
       .where('members', 'array-contains', storedUser.uid)
-      .orderBy('lastMessageTimestamp', 'desc')
-      .onSnapshot(snapshot => {
+      .onSnapshot(async snapshot => {
         if (!snapshot) return setChats([]);
-        const chatList = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id,
-        }));
-        setChats(chatList);
+
+        const chatPromises = snapshot.docs.map(async (doc: any) => {
+          const chatData = {id: doc.id, ...doc.data()};
+          const otherMembers = chatData.members.filter(
+            (uid: string) => uid !== storedUser.uid,
+          );
+
+          if (otherMembers.length === 1) {
+            // For one-on-one chats, fetch the other user's details
+            const otherUser = await fetchUserDetails(otherMembers[0]);
+            return {...chatData, otherUser};
+          }
+
+          // For group chats, you can handle it differently if needed
+          return chatData;
+        });
+
+        const resolvedChats = await Promise.all(chatPromises);
+        const sortedChats = resolvedChats.sort(
+          (a, b) =>
+            (b.lastMessageTimestamp?.toDate?.() || 0) -
+            (a.lastMessageTimestamp?.toDate?.() || 0),
+        );
+
+        setChats(sortedChats);
       });
 
     return () => unsubscribe();
@@ -310,18 +423,38 @@ export function useSendMessage(chatId: string) {
       const messageRef = firestore()
         .collection('chats')
         .doc(chatId)
-        .collection('messages');
-      await messageRef.add({
+        .collection('messages')
+        .doc();
+
+      const chatRef = firestore().collection('chats').doc(chatId);
+      const batch = firestore().batch();
+
+      // use a Firestore batch to atomically write both the message and update the chat
+      batch.set(messageRef, {
         senderId,
         text,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
 
       // update chat last message and mesage timestamp
-      await firestore().collection('chats').doc(chatId).update({
+      batch.update(chatRef, {
         lastMessage: text,
         lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
       });
+
+      await batch.commit();
+
+      // await chatRef.add({
+      //   senderId,
+      //   text,
+      //   createdAt: firestore.FieldValue.serverTimestamp(),
+      // });
+
+      // update chat last message and mesage timestamp
+      // await firestore().collection('chats').doc(chatId).update({
+      //   lastMessage: text,
+      //   lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
+      // });
 
       setLoading(false);
     } catch (error) {
