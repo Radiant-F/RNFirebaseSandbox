@@ -6,6 +6,7 @@ import {Alert} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../../routes/type';
+import {ChatListType} from '..';
 
 type ContactType = {
   createdAt: string;
@@ -287,8 +288,13 @@ export function useGetOrStartChat() {
         const newChat = await chatRef.add({
           members: [storedUser.uid, contactId],
           createdAt: firestore.FieldValue.serverTimestamp(),
+          lastMessagetimestamp: firestore.FieldValue.serverTimestamp(),
           lastMessage: '',
-          lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
+          // lastMessage: {
+          //   text: '',
+          //   sender: '',
+          //   timestamp: firestore.FieldValue.serverTimestamp(),
+          // },
         });
         chatId = newChat.id;
       }
@@ -348,7 +354,7 @@ export function useOldChatList() {
 }
 
 export function useChatList() {
-  const [chats, setChats] = useState<any[]>([]);
+  const [chats, setChats] = useState<ChatListType[]>([]);
   const storedUser = useAppSelector(state => state.auth.user);
 
   useEffect(() => {
