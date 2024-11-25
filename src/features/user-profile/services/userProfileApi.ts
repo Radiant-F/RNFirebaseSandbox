@@ -13,14 +13,16 @@ import auth, {
 } from '@react-native-firebase/auth';
 import {Alert, Linking, ToastAndroid} from 'react-native';
 import {UserType} from '../../authentication';
+import {useNavigation} from '@react-navigation/native';
+import {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {RootStackParamList} from '../../../routes/type';
 
 export function useUpdateProfile() {
   const storedUser = useAppSelector(state => state.auth.user);
-  const [updating, setUpdating] = useState(false);
-  const {progress, uploadFile, uploading} = useCloudStorageFileUpload();
+  const [loading, setLoading] = useState(false);
 
   async function updateProfile(data: {displayName: string}) {
-    setUpdating(true);
+    setLoading(true);
     try {
       const userData = {...data, updatedAt: new Date().toISOString()};
 
@@ -34,14 +36,14 @@ export function useUpdateProfile() {
         .doc(storedUser.uid)
         .update(userData);
 
-      setUpdating(false);
+      setLoading(false);
     } catch (error) {
       console.log('error updating profile:', error);
-      setUpdating(false);
+      setLoading(false);
     }
   }
 
-  return {updating, updateProfile, progress, uploadingPhoto: uploading};
+  return {loading, updateProfile};
 }
 
 export function useUpdatePfp() {
@@ -116,43 +118,33 @@ export function useUpdatePassword() {
 }
 
 export function useUpdateEmail() {
+  const currentEmail = useAppSelector(state => state.auth.user.email);
   const [loading, setLoading] = useState<boolean>(false);
+
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   async function updateEmail(newEmail: string, currentPassword: string) {
     setLoading(true);
     try {
-      // const user = auth().currentUser;
-      // if (!user) throw new Error('no authenticated user');
+      const user = auth().currentUser;
+      if (!user) return Promise.reject('no authenticated user');
 
-      const auth = getAuth();
-      if (!auth.currentUser) throw new Error('no authenticated user');
-      await onUpdateEmail(auth.currentUser, newEmail);
-      console.log('erm what the sigma');
+      await user.reauthenticateWithCredential(
+        auth.EmailAuthProvider.credential(currentEmail, currentPassword),
+      ); // check if user password is correct
 
-      // reauthenticate user
-      // const credential = auth.EmailAuthProvider.credential(
-      //   user.email!,
-      //   currentPassword,
-      // );
-      // await user.reauthenticateWithCredential(credential);
-
-      // // update email
-      // await user.verifyBeforeUpdateEmail(newEmail);
-
-      // Alert.alert(
-      //   '',
-      //   'Verification URL has been sent to the new email! Please open the URL to confirm the email update. Check the spam folder if necessary.',
-      // );
-
-      // await firestore()
-      //   .collection('users')
-      //   .doc(user.uid)
-      //   .update({email: newEmail});
-
-      setLoading(false);
-    } catch (error) {
-      setLoading(false);
+      await user.verifyBeforeUpdateEmail(newEmail);
+      Alert.alert(
+        'Success',
+        'Please check your inbox to verify, then sign in with new email.',
+      );
+      await auth().signOut();
+      navigation.reset({routes: [{name: 'Authentication'}]});
+    } catch (error: any) {
       console.log('error updating email:', error);
+      Alert.alert('', error.message);
+      setLoading(false);
       return Promise.reject(error);
     }
   }
@@ -160,20 +152,36 @@ export function useUpdateEmail() {
   return {loading, updateEmail};
 }
 
-// export function useVerifyEmail() {
-//   const [loading, setLoading] = useState<boolean>(false);
+export function useDeleteMe() {
+  const [loading, setLoading] = useState<boolean>(false);
 
-// async function verifyEmail() {
-//   setLoading(true)
-//   try {
-//     const user = auth().currentUser
-//     if(user && !user.emailVerified) {
-//       await
-//     }
-//   } catch (error) {
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-//   }
-// }
+  async function deleteMe(credential: {email: string; password: string}) {
+    setLoading(true);
+    try {
+      const user = auth().currentUser;
 
-//   return {loading};
-// }
+      if (user) {
+        await user.reauthenticateWithCredential(
+          auth.EmailAuthProvider.credential(
+            credential.email,
+            credential.password,
+          ),
+        );
+
+        await firestore().collection('users').doc(user.uid).delete();
+        await user.delete();
+      }
+
+      navigation.reset({routes: [{name: 'Authentication'}]});
+    } catch (error: any) {
+      console.log('error delete me:', error);
+      Alert.alert('', error.message);
+      setLoading(false);
+    }
+  }
+
+  return {loading, deleteMe};
+}
