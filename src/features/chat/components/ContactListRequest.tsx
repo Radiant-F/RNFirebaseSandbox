@@ -1,4 +1,11 @@
-import {FlatList, Image, StyleSheet, Text, View} from 'react-native';
+import {
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import React, {useState} from 'react';
 import {ButtonStyled, Gap} from '../../../components';
 import {
@@ -7,6 +14,7 @@ import {
   useRespondToContactRequest,
 } from '../services/chatApi';
 import {useAppSelector} from '../../../hooks';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 export default function ContactListRequest() {
   const storedUser = useAppSelector(state => state.auth.user);
@@ -46,42 +54,36 @@ export default function ContactListRequest() {
               </View>
             </View>
 
-            <Gap height={10} />
+            {/* <Gap height={10} />
             <Text style={{color: 'white'}}>ID: {item.contactId}</Text>
-            <Gap height={10} />
+            <Gap height={10} /> */}
+
+            <Gap height={15} />
 
             <View style={{flexDirection: 'row', justifyContent: 'center'}}>
-              <ButtonStyled
+              <TouchableOpacity
+                style={styles.btnRespond}
+                activeOpacity={0.75}
                 onPress={async () => {
                   setLoadingIndicator({index: index, type: 'decline'});
                   await respondToRequest(storedUser.uid, item, 'declined');
                   setLoadingIndicator({index: null, type: ''});
-                }}
-                icon="close-thick"
-                title="Decline"
-                style={{width: 120}}
-                loading={
-                  loadingIndicator.type == 'decline' &&
-                  loadingIndicator.index == index
-                }
-                disabled={responding}
-              />
+                }}>
+                <Icon name="close-circle-outline" color={'white'} size={20} />
+                <Text style={styles.textRespond}>Decline</Text>
+              </TouchableOpacity>
               <Gap width={10} />
-              <ButtonStyled
+              <TouchableOpacity
+                style={styles.btnRespond}
+                activeOpacity={0.75}
                 onPress={async () => {
                   setLoadingIndicator({index: index, type: 'accept'});
                   await respondToRequest(storedUser.uid, item, 'accepted');
                   setLoadingIndicator({index: null, type: ''});
-                }}
-                icon="check-bold"
-                title="Accept"
-                style={{width: 120}}
-                loading={
-                  loadingIndicator.type == 'accept' &&
-                  loadingIndicator.index == index
-                }
-                disabled={responding}
-              />
+                }}>
+                <Icon name="check-circle-outline" color={'white'} size={20} />
+                <Text style={styles.textRespond}>Accept</Text>
+              </TouchableOpacity>
             </View>
           </View>
         );
@@ -91,6 +93,22 @@ export default function ContactListRequest() {
 }
 
 const styles = StyleSheet.create({
+  textRespond: {
+    color: 'white',
+    marginHorizontal: 5,
+    fontWeight: '500',
+  },
+  btnRespond: {
+    height: 40,
+    flexDirection: 'row',
+    backgroundColor: '#00000080',
+    borderRadius: 40 / 2,
+    borderColor: 'white',
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
   textEmpty: {
     textAlign: 'center',
     color: 'grey',
