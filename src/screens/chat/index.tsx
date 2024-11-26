@@ -1,33 +1,18 @@
+import {FlatList, StyleSheet, Text, View} from 'react-native';
+import {ButtonStyled, Header, SuchEmpty} from '../../components';
 import {
-  FlatList,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableNativeFeedback,
-  View,
-} from 'react-native';
-import React from 'react';
-import {ButtonStyled, Gap, Header} from '../../components';
-import {ChatScreenProps, useChatList} from '../../features/chat';
-import {FirebaseFirestoreTypes} from '@react-native-firebase/firestore';
-
-type ChatType = {
-  createdAt: FirebaseFirestoreTypes.Timestamp;
-  id: string;
-  lastMessage: string;
-  lastMessageTimestamp: FirebaseFirestoreTypes.Timestamp;
-  members: string[];
-  otherUser: {
-    displayName: string;
-    photo: string;
-  };
-};
+  ChatScreenProps,
+  RenderChatList,
+  useChatList,
+} from '../../features/chat';
 
 export default function Chat({navigation}: ChatScreenProps) {
-  const {chats}: {chats: ChatType[]} = useChatList();
+  const {chats} = useChatList();
 
   return (
     <View style={{flex: 1}}>
+      {chats.length == 0 && <SuchEmpty />}
+
       <Header
         title="Chat"
         buttonLeft={{icon: 'chevron-left', onPress: () => navigation.goBack()}}
@@ -39,31 +24,9 @@ export default function Chat({navigation}: ChatScreenProps) {
 
       <FlatList
         contentContainerStyle={styles.container}
-        ListEmptyComponent={<Text style={styles.textEmpty}>Such empty!</Text>}
         data={chats}
         renderItem={({item}) => {
-          return (
-            <TouchableNativeFeedback
-              useForeground
-              onPress={() =>
-                navigation.navigate('ChatScreen', {chatId: item.id})
-              }>
-              <View style={styles.btnChatContainer}>
-                <Image
-                  source={{uri: item.otherUser.photo}}
-                  style={{width: 50, height: 50, borderRadius: 50 / 2}}
-                  resizeMethod="resize"
-                />
-                <Text style={{color: 'white'}}>
-                  {item.otherUser.displayName}
-                </Text>
-                <Text style={{color: 'white'}} numberOfLines={1}>
-                  {item.lastMessage}
-                </Text>
-                <Text style={{color: 'white'}}>ID: {item.id}</Text>
-              </View>
-            </TouchableNativeFeedback>
-          );
+          return <RenderChatList item={item} />;
         }}
       />
 
