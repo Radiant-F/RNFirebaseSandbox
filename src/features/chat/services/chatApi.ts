@@ -483,6 +483,16 @@ export function useSendMessage(chatId: string) {
   return {loading, sendMessage};
 }
 
+export async function getFcmToken(): Promise<string> {
+  try {
+    await messaging().registerDeviceForRemoteMessages();
+    const fcmToken = await messaging().getToken();
+    return fcmToken;
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
 export function useInitializeNotification() {
   const storedUser = useAppSelector(state => state.auth.user);
 
@@ -491,8 +501,7 @@ export function useInitializeNotification() {
       await notificationRequest();
       await notificationCreateChannel('chat-message', 'Chat');
 
-      await messaging().registerDeviceForRemoteMessages();
-      const fcmToken = await messaging().getToken();
+      const fcmToken = await getFcmToken();
 
       await firestore()
         .collection('users')
@@ -506,4 +515,22 @@ export function useInitializeNotification() {
   }
 
   return {initializeNotification};
+}
+
+export function useCompareFcmToken() {
+  const storedUser = useAppSelector(state => state.auth.user);
+
+  async function compareFcmToken() {
+    try {
+      const deviceFcmToken = await getFcmToken();
+      if (storedUser.fcmToken != '' && deviceFcmToken != storedUser.fcmToken) {
+        await firestore()
+          .collection('users')
+          .doc(storedUser.uid)
+          .update({fcmToken: deviceFcmToken});
+      }
+    } catch (error) {}
+  }
+
+  return {compareFcmToken};
 }
