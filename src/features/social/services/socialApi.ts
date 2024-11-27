@@ -8,7 +8,7 @@ import {
 import {useAppSelector} from '../../../hooks';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {RootStackParamList} from '../../../routes/types';
+import {RootStackParamList} from '../../../routes/type';
 
 export function useSocialPosts() {
   const [posts, setPosts] = useState<PostType[]>([]);
@@ -56,11 +56,12 @@ export function useSocialPostsPersonal() {
 }
 
 export function useCreatePost() {
+  const uid = useAppSelector(state => state.auth.user.uid);
+  const {progress, uploadFile, uploading} = useCloudStorageFileUpload();
+  const [creating, setCreating] = useState<boolean>(false);
+
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [creating, setCreating] = useState<boolean>(false);
-  const {progress, uploadFile, uploading} = useCloudStorageFileUpload();
-  const uid = useAppSelector(state => state.auth.user.uid);
 
   const loading = creating || uploading;
 
@@ -70,10 +71,13 @@ export function useCreatePost() {
       const postData = data;
 
       for (const media of mediaFiles) {
+        const uniqueFileName = (new Date().getTime() * Math.random())
+          .toFixed(0)
+          .toString();
         const mediaUrl = await uploadFile(
           media.fileType,
           media.fileUri,
-          `/posts/${uid}/${media.fileName}`,
+          `/users/${uid}/posts/${media.fileName}_${uniqueFileName}`,
         );
         postData.mediaUrl.push(mediaUrl);
       }
@@ -91,69 +95,49 @@ export function useCreatePost() {
 }
 
 export function useUpdatePost() {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const uid = useAppSelector(state => state.auth.user.uid);
   const [updating, setUpdating] = useState(false);
   const {progress, uploadFile, uploading} = useCloudStorageFileUpload();
-  const uid = useAppSelector(state => state.auth.user.uid);
+
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const loading = updating || uploading;
 
-  async function updatePost(data: PostType, newMedia: MediaFileType[]) {
+  async function updatePost(
+    data: PostType,
+    mediaData: MediaFileType[],
+    mediaToDelete: string[],
+  ) {
     setUpdating(true);
     try {
       const postData = {...data};
 
-      // step 1: identify removed media
-      const existingMediaUrls = postData.mediaUrl || [];
-      const newMediaUris = newMedia.map(media => media.fileUri);
-      const mediaToDelete = existingMediaUrls.filter(
-        url => !newMediaUris.includes(url),
-      );
+      const mediaToUpload: string[] = [];
 
-      // step 2: delete removed media
-      for (const mediaUrl of mediaToDelete) {
-        console.log(mediaUrl);
-        await cloudStorageFileDelete(mediaUrl);
-      }
-
-      // step 3: upload new media and get the URLs
-      const updatedMediaUrls = [];
-      for (const media of newMedia) {
-        if (!existingMediaUrls.includes(media.fileUri)) {
-          // only upload new media that werent part of the original post
+      // check for new media
+      for (const media of mediaData) {
+        if (media.fileName) {
+          // upload new media
           const mediaUrl = await uploadFile(
             media.fileType,
             media.fileUri,
-            `/posts/${uid}/${media.fileName}`,
+            `/users/${uid}/posts/${new Date().getTime()}_${media.fileName}`,
           );
-          updatedMediaUrls.push(mediaUrl);
+          mediaToUpload.push(mediaUrl);
         } else {
-          // keep existing media URLs that werent deleted
-          updatedMediaUrls.push(media.fileUri);
+          // keep old media
+          mediaToUpload.push(media.fileUri);
         }
       }
 
-      // // delete existing media and replace it with the new media
-      // if (media.fileName) {
-      //   data.imageUrl && (await cloudStorageFileDelete(data.imageUrl));
-      //   const mediaUrl = await uploadFile(
-      //     media.fileType,
-      //     media.fileUri,
-      //     `/posts/${uid}_${media.fileName}`,
-      //   );
-      //   postData.imageUrl = mediaUrl;
-      // }
+      // delete removed media
+      for (const mediaUrl of mediaToDelete) {
+        await cloudStorageFileDelete(mediaUrl);
+      }
 
-      // // delete existing media. might get false warning when updating a post without media
-      // if (media.fileUri == '') {
-      //   await cloudStorageFileDelete(data.imageUrl ? data.imageUrl : '');
-      //   postData.imageUrl = '';
-      // }
-
-      // step 4: update
-      postData.mediaUrl = updatedMediaUrls;
-      await firestore().collection('posts').doc(data.id).update(data);
+      postData.mediaUrl = mediaToUpload;
+      await firestore().collection('posts').doc(data.id).update(postData);
       navigation.goBack();
     } catch (error) {
       setUpdating(false);
@@ -168,8 +152,8 @@ export function useDeletePost() {
   async function deletePost(item: PostType) {
     try {
       if (item.mediaUrl) {
-        for (const mediaIndex in item.mediaUrl) {
-          await cloudStorageFileDelete(item.mediaUrl[mediaIndex]);
+        for (const media of item.mediaUrl) {
+          await cloudStorageFileDelete(media);
         }
       }
       await firestore().collection('posts').doc(item.id).delete();
