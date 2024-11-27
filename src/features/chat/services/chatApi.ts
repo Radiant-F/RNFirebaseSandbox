@@ -7,6 +7,9 @@ import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../../routes/type';
 import {ChatListType} from '..';
+import messaging from '@react-native-firebase/messaging';
+import {notificationCreateChannel, notificationRequest} from '../../../utils';
+import {localStorage} from '../../../utils';
 
 type ContactType = {
   createdAt: string;
@@ -106,14 +109,11 @@ export function useRealtimeGetContacts(
 }
 
 export function useRespondToContactRequest() {
-  const [loading, setLoading] = useState(false);
-
   async function respondToRequest(
     currentUid: string,
     requester: ContactType,
-    response: 'accepted' | 'declined',
+    response: 'accepted' | 'declined' | 'remove',
   ) {
-    setLoading(true);
     try {
       const batch = firestore().batch();
 
@@ -124,7 +124,7 @@ export function useRespondToContactRequest() {
         .collection('contacts')
         .doc(currentUid);
 
-      if (response === 'accepted') {
+      if (response == 'accepted') {
         batch.update(requesterRef, {status: 'accepted'});
 
         // Add the contact to the current user's contacts
@@ -141,7 +141,7 @@ export function useRespondToContactRequest() {
           status: 'accepted',
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
-      } else if (response === 'declined') {
+      } else if (response == 'declined') {
         batch.update(requesterRef, {status: 'declined'});
 
         // Optionally, remove the declined request from the current user's list
@@ -152,24 +152,32 @@ export function useRespondToContactRequest() {
           .doc(requester.contactId);
 
         batch.update(currentUserRef, {status: 'declined'}); // Ensure status is updated locally
+      } else if (response == 'remove') {
+        const currentUserRef = firestore()
+          .collection('users')
+          .doc(currentUid)
+          .collection('contacts')
+          .doc(requester.contactId);
+
+        batch.delete(currentUserRef);
       }
 
       await batch.commit();
-
-      setLoading(false);
-    } catch (error) {
-      setLoading(false);
+    } catch (error: any) {
       console.log('Error responding to contact request:', error);
+      Alert.alert('', error.message);
     }
   }
 
-  return {loading, respondToRequest};
+  return {respondToRequest};
 }
 
 export function useSearchUser() {
   const [users, setUsers] = useState<UserType[]>([]);
+  const [loading, setLoading] = useState(false);
 
   async function searchUser(query: string) {
+    setLoading(true);
     try {
       const snapshot = await firestore()
         .collection('users')
@@ -178,19 +186,22 @@ export function useSearchUser() {
 
       const results = snapshot.docs.map(doc => ({...doc.data()})) as UserType[];
       setUsers(results);
+      setLoading(false);
     } catch (error) {
+      setLoading(false);
       console.log('error searching user:', error);
     }
   }
 
-  return {users, searchUser};
+  return {users, searchUser, loading};
 }
 
 export function useAddContact() {
   const storedUser = useAppSelector(state => state.auth.user);
+  const [loading, setLoading] = useState(false);
+
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [loading, setLoading] = useState(false);
 
   async function addContact(selectedContact: UserType) {
     setLoading(true);
@@ -201,20 +212,20 @@ export function useAddContact() {
       const currentUserContactData = {
         id: selectedContact.uid,
         status: 'pending', // This user sees it as pending
+        requestedBy: storedUser.uid, // Tracks who initiated the request
         createdAt: timestamp,
         displayName: selectedContact.displayName,
-        photo: selectedContact.photo,
-        requestedBy: storedUser.uid, // Tracks who initiated the request
+        photo: selectedContact.photoURL,
       };
 
       // Data for the contact user
       const contactUserContactData = {
         id: storedUser.uid,
         status: 'requested', // The other side sees it as "requested"
+        requestedBy: storedUser.uid, // Tracks who initiated the request
         createdAt: timestamp,
         displayName: storedUser.displayName,
-        photo: storedUser.photo,
-        requestedBy: storedUser.uid, // Tracks who initiated the request
+        photo: storedUser.photoURL,
       };
 
       const batch = firestore().batch();
@@ -262,6 +273,7 @@ export function useAddContact() {
 export function useGetOrStartChat() {
   const storedUser = useAppSelector(state => state.auth.user);
   const [loading, setLoading] = useState(false);
+
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -288,7 +300,7 @@ export function useGetOrStartChat() {
         const newChat = await chatRef.add({
           members: [storedUser.uid, contactId],
           createdAt: firestore.FieldValue.serverTimestamp(),
-          lastMessagetimestamp: firestore.FieldValue.serverTimestamp(),
+          lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
           lastMessage: '',
           // lastMessage: {
           //   text: '',
@@ -313,13 +325,13 @@ async function fetchUserDetails(uid: string) {
   try {
     const userDoc = await firestore().collection('users').doc(uid).get();
     if (userDoc.exists) {
-      const {displayName, photo} = userDoc.data() as UserType;
-      return {displayName, photo};
+      const {displayName, photoURL} = userDoc.data() as UserType;
+      return {displayName, photoURL};
     }
   } catch (error) {
     console.error('Error fetching user details:', error);
   }
-  return {displayName: 'Unknown', photo: null}; // Default fallback
+  return {displayName: 'Unknown', photoURL: null}; // Default fallback
 }
 
 export function useOldChatList() {
@@ -469,4 +481,29 @@ export function useSendMessage(chatId: string) {
   }
 
   return {loading, sendMessage};
+}
+
+export function useInitializeNotification() {
+  const storedUser = useAppSelector(state => state.auth.user);
+
+  async function initializeNotification() {
+    try {
+      await notificationRequest();
+      await notificationCreateChannel('chat-message', 'Chat');
+
+      await messaging().registerDeviceForRemoteMessages();
+      const fcmToken = await messaging().getToken();
+
+      await firestore()
+        .collection('users')
+        .doc(storedUser.uid)
+        .update({fcmToken});
+
+      localStorage.set('init-permission-notification', true);
+    } catch (error) {
+      console.log('error initializing notification:', error);
+    }
+  }
+
+  return {initializeNotification};
 }
