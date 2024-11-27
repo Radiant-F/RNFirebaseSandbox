@@ -1,101 +1,67 @@
-import {FirebaseAuthTypes} from '@react-native-firebase/auth';
-import {AuthType, setCurrentUser} from '..';
 import auth from '@react-native-firebase/auth';
-import {useEffect, useState} from 'react';
+import {defaultPfp} from '../../../utils';
+import {clearCurrentUser, setCurrentUser, UserType} from '..';
 import {useAppDispatch, useAppSelector} from '../../../hooks';
 import firestore from '@react-native-firebase/firestore';
 import {useNavigation} from '@react-navigation/native';
-import {Alert} from 'react-native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {RootStackParamList} from '../../../routes/types';
+import {RootStackParamList} from '../../../routes/type';
+import {useDispatch} from 'react-redux';
+import {Alert} from 'react-native';
 import {GoogleSignin} from '@react-native-google-signin/google-signin';
-const defaultProfilePicture =
-  'https://firebasestorage.googleapis.com/v0/b/fauthdemo-4d043.appspot.com/o/124034934_p0.jpg?alt=media&token=1f549c26-802b-4257-9115-f1871df8c20f';
+import {useState} from 'react';
 
 const dateISOString = new Date().toISOString();
-const defaultUserData: AuthType['user'] = {
-  name: '',
+
+const defaultUser: UserType = {
+  uid: '',
+  displayName: '',
   email: '',
+  anonymous: false,
+  photoURL: defaultPfp,
   createdAt: dateISOString,
   updatedAt: dateISOString,
-  photo: defaultProfilePicture,
-  anonymous: false,
-  uid: '',
+  contacts: {},
+  fcmToken: '',
 };
 
-async function getUserSnapshot(uid: string): Promise<AuthType['user']> {
-  try {
-    const userSnapshot = await firestore().collection('users').doc(uid).get();
-    const useData = {
-      ...userSnapshot.data(),
-      uid: uid,
-    } as AuthType['user'];
-    return useData;
-  } catch (error) {
-    return Promise.reject(error);
-  }
-}
-
-async function setUserSnapshot(uid: string) {
-  try {
-    const userSnapshot = await firestore().collection('users').doc(uid).get();
-    const useData = {
-      ...userSnapshot.data(),
-      uid: uid,
-    } as AuthType['user'];
-    return useData;
-  } catch (error) {
-    return Promise.reject(error);
-  }
-}
-
-export function useCurrentUser() {
-  const uid = auth().currentUser?.uid;
-  const dispatch = useAppDispatch();
-  const [user, setUser] = useState<AuthType['user']>();
-
-  useEffect(() => {
-    const unsubscribe = firestore()
-      .collection('users')
-      .doc(uid)
-      .onSnapshot(snapshot => {
-        if (snapshot) {
-          const userSnapshot = {
-            ...snapshot.data(),
-            uid: snapshot.id,
-          } as AuthType['user'];
-
-          setUser(userSnapshot);
-          dispatch(setCurrentUser(userSnapshot));
-        }
-      });
-
-    return () => unsubscribe();
-  }, []);
-
-  return user;
-}
-
 export function useSignIn() {
-  const dispatch = useAppDispatch();
-  const [loading, setLoading] = useState<boolean>(false);
+  const dispatch = useDispatch();
+  const [loading, setLoading] = useState(false);
+
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   async function signIn(credential: {email: string; password: string}) {
     setLoading(true);
     try {
-      let userCredential: FirebaseAuthTypes.UserCredential =
-        await auth().signInWithEmailAndPassword(
-          credential.email,
-          credential.password,
-        );
-      // const signedInUserData = await getUserSnapshot(userCredential.user.uid);
-      // dispatch(setCurrentUser(signedInUserData));
-      navigation.replace('Home');
-    } catch (error) {
+      await auth().signInWithEmailAndPassword(
+        credential.email,
+        credential.password,
+      );
+
+      const user = auth().currentUser;
+      if (user) {
+        const userSnapshot = await firestore()
+          .collection('users')
+          .doc(user.uid)
+          .get();
+        dispatch(setCurrentUser(userSnapshot.data() as UserType));
+
+        // check for new email
+        if (user.email != userSnapshot.data()?.email) {
+          await firestore()
+            .collection('users')
+            .doc(user.uid)
+            .update({email: user.email});
+        }
+
+        navigation.replace('Home');
+      }
+    } catch (error: any) {
+      console.log('error sign in:', error);
+      Alert.alert('', error.message);
       setLoading(false);
-      console.log('sign in error:', error);
     }
   }
 
@@ -104,39 +70,48 @@ export function useSignIn() {
 
 export function useSignUp() {
   const dispatch = useAppDispatch();
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   async function signUp(credential: {
-    name: string;
     email: string;
     password: string;
+    name: string;
   }) {
     setLoading(true);
     try {
-      let userCredential: FirebaseAuthTypes.UserCredential =
-        await auth().createUserWithEmailAndPassword(
-          credential.email,
-          credential.password,
-        );
+      await auth().createUserWithEmailAndPassword(
+        credential.email,
+        credential.password,
+      );
+      await auth().currentUser?.updateProfile({
+        displayName: credential.name,
+        photoURL: defaultPfp,
+      });
 
-      await firestore()
-        .collection('users')
-        .doc(userCredential.user.uid)
-        .set({
-          ...defaultUserData,
-          email: credential.email,
-          name: credential.name,
-          uid: userCredential.user.uid,
-        });
+      const user = auth().currentUser;
+      if (user) {
+        const {email, displayName, uid, photoURL} = user;
+        const userData = {
+          ...defaultUser,
+          displayName,
+          email,
+          photoURL,
+          uid,
+        };
 
-      const signedInUserData = await getUserSnapshot(userCredential.user.uid);
-      dispatch(setCurrentUser(signedInUserData));
-      navigation.replace('Home');
-    } catch (error) {
+        await firestore().collection('users').doc(user.uid).set(userData);
+
+        dispatch(setCurrentUser(userData as UserType));
+
+        navigation.replace('Home');
+      }
+    } catch (error: any) {
+      console.log('error sign up:', error);
+      Alert.alert('', error.message);
       setLoading(false);
-      console.log('sign up error:', error);
     }
   }
 
@@ -146,55 +121,46 @@ export function useSignUp() {
 export function useSignInAnonymous() {
   const dispatch = useAppDispatch();
   const [loading, setLoading] = useState<boolean>(false);
+
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  async function signInAnonymously() {
-    Alert.alert(
-      'Sign In Anonymously?',
-      "Certain features won't be available and your account won't be stored once you signed out.",
-      [
-        {text: 'Cancel'},
-        {
-          text: 'Continue',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const userCredential = await auth().signInAnonymously();
-              const uid = userCredential.user.uid;
+  async function signInAnonymous() {
+    setLoading(true);
+    try {
+      await auth().signInAnonymously();
 
-              await firestore()
-                .collection('users')
-                .doc(uid)
-                .set({
-                  ...defaultUserData,
-                  name: `Anon_${uid}`,
-                  anonymous: true,
-                  uid: uid,
-                });
+      const user = auth().currentUser;
+      if (user) {
+        const userData = {
+          ...defaultUser,
+          displayName: `Anon:${new Date().getTime()}`,
+          photoURL: defaultPfp,
+          anonymous: true,
+          uid: user.uid,
+        };
+        await firestore().collection('users').doc(user.uid).set(userData);
+        dispatch(setCurrentUser(userData));
 
-              const signedInUserData = await getUserSnapshot(uid);
-              dispatch(setCurrentUser(signedInUserData));
-              navigation.replace('Home');
-            } catch (error) {
-              setLoading(false);
-              console.log('anon sign in error:', error);
-            }
-          },
-        },
-      ],
-    );
+        navigation.replace('Home');
+      }
+    } catch (error: any) {
+      console.log('error sign in anon:', error);
+      Alert.alert('', error.message);
+      setLoading(false);
+    }
   }
 
-  return {loading, signInAnonymously};
+  return {loading, signInAnonymous};
 }
 
 export function useSignInGoogle() {
+  const dispatch = useAppDispatch();
   GoogleSignin.configure({
     webClientId:
       '623167292612-4jimakng4ts38ig93lvnrpf0as759jn8.apps.googleusercontent.com',
   });
-  const dispatch = useAppDispatch();
+
   const [loading, setLoading] = useState(false);
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -209,51 +175,78 @@ export function useSignInGoogle() {
         const googleCredential = auth.GoogleAuthProvider.credential(
           response.data.idToken,
         );
-        const userCredential = await auth().signInWithCredential(
-          googleCredential,
-        );
 
-        const {email, name, photo} = response.data.user;
-        await firestore().collection('users').doc(userCredential.user.uid).set({
-          name: name,
-          email: email,
-          createdAt: dateISOString,
-          updatedAt: dateISOString,
-          photo: photo,
-          anonymous: false,
-        });
-        const signedInUserData = await getUserSnapshot(userCredential.user.uid);
-        dispatch(setCurrentUser(signedInUserData));
+        await auth().signInWithCredential(googleCredential);
 
-        navigation.replace('Home');
+        const user = auth().currentUser;
+        if (user) {
+          const {email, displayName, photoURL} = user;
+          const userData = {
+            ...defaultUser,
+            displayName,
+            email,
+            photoURL,
+            uid: user.uid,
+          };
+          await firestore().collection('users').doc(user.uid).set(userData);
+          dispatch(setCurrentUser(userData as UserType));
+
+          navigation.replace('Home');
+        }
       } else {
-        console.warn('google sign in warning:', response);
+        console.warn('warning sign in google:', response);
         setLoading(false);
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.log('error sign in google:', error);
+      Alert.alert('', error.message);
       setLoading(false);
-      console.log('google sign in error:', error);
     }
   }
 
   return {loading, signInGoogle};
 }
 
-export function useUpdateProfile() {
-  const [loading, setLoading] = useState(false);
-  // const user = useCurrentUser();
-  const user = useAppSelector(state => state.auth.user);
+export function useSignOut() {
+  const dispatch = useAppDispatch();
+  const user = auth().currentUser;
 
-  async function updateProfile(data: AuthType['user']) {
-    setLoading(true);
-    try {
-      await firestore().collection('users').doc(user?.uid).update(data);
-      setLoading(false);
-    } catch (error) {
-      setLoading(false);
-      console.log('error updating profile:', error);
-    }
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  function signOut() {
+    Alert.alert(
+      'Sign Out?',
+      'Your session will be ended.',
+      [
+        {text: 'Cancel'},
+        {
+          text: 'Sign Out',
+          onPress: async () => {
+            try {
+              if (GoogleSignin.hasPreviousSignIn())
+                await GoogleSignin.signOut();
+
+              if (user) {
+                if (user.isAnonymous) {
+                  await firestore().collection('users').doc(user.uid).delete();
+                  await user.delete();
+                } else await auth().signOut();
+
+                dispatch(clearCurrentUser());
+                navigation.replace('Authentication');
+              }
+            } catch (error) {
+              console.log('error signing out:', error);
+              dispatch(clearCurrentUser());
+              navigation.replace('Authentication');
+            }
+          },
+        },
+      ],
+      {userInterfaceStyle: 'dark'},
+    );
   }
 
-  return {loading, updateProfile};
+  return {signOut};
 }
