@@ -1,16 +1,22 @@
 import {store} from './redux';
 import {Provider} from 'react-redux';
 import {NavigationContainer} from '@react-navigation/native';
-import RootStack from './routes';
 import {ImageBackground} from './components';
+import {Splash} from './screens';
+import {StatusBar} from 'react-native';
 
 export default function App() {
   return (
     <Provider store={store}>
+      <ImageBackground />
       <NavigationContainer>
-        <ImageBackground />
-        <RootStack />
+        <Splash />
       </NavigationContainer>
+      <StatusBar
+        barStyle={'light-content'}
+        translucent
+        backgroundColor={'transparent'}
+      />
     </Provider>
   );
 }
