@@ -8,29 +8,7 @@ import {name as appName} from './app.json';
 import notifee, {EventType} from '@notifee/react-native';
 import messaging from '@react-native-firebase/messaging';
 import {displayNotification} from './src/features/chat/services/notifee';
-
-notifee.onBackgroundEvent(async ({detail, type}) => {
-  const notificationData = detail.notification.data;
-
-  switch (type) {
-    case EventType.DELIVERED:
-      if (detail.notification.id == 'chat-message') {
-        console.log('background delivered', notificationData);
-      }
-      break;
-    case EventType.ACTION_PRESS:
-      if (
-        detail.notification.id == 'chat-message' &&
-        detail.pressAction.id == 'reply'
-      ) {
-        console.log('background action press', {
-          id: detail.notification.id,
-          message: detail.input,
-        });
-      }
-      break;
-  }
-});
+import './src/features/chat/services/notifeeOnBackgroundEvent';
 
 async function onMessageRecieved(message) {
   try {
@@ -43,6 +21,8 @@ async function onMessageRecieved(message) {
           sender_uid: data.sender_uid,
           sender_pfp: data.sender_pfp,
           message: data.message,
+          chatId: data.chatId,
+          sender_fcm: data.sender_fcm,
         });
       }
     }
