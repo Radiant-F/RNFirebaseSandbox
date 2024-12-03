@@ -2,6 +2,7 @@ import {FlatList, StyleSheet, Text, View} from 'react-native';
 import {ButtonStyled, Header, SuchEmpty} from '../../components';
 import {
   ChatScreenProps,
+  NotificationPermission,
   RenderChatList,
   useChatList,
 } from '../../features/chat';
@@ -36,6 +37,9 @@ export default function Chat({navigation}: ChatScreenProps) {
         icon="chat-plus-outline"
         style={styles.btnFloat}
       />
+
+      {/* elp */}
+      {chats.length > 0 && <NotificationPermission />}
     </View>
   );
 }
