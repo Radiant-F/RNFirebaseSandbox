@@ -4,6 +4,7 @@ import {useAppSelector} from '../../hooks';
 import {ButtonStyled, Header} from '../../components';
 import {useSignOut} from '../../features/authentication';
 import * as Animatable from 'react-native-animatable';
+import {defaultPfp} from '../../utils';
 
 export default function Home({navigation}: HomeScreenProps) {
   const onSignOut = useSignOut().signOut;
@@ -39,7 +40,7 @@ export default function Home({navigation}: HomeScreenProps) {
           }}
           buttonRight={{
             onPress: () => navigation.navigate('UserProfile', user),
-            image: {uri: user.photoURL ? user.photoURL : undefined},
+            image: {uri: user.photoURL ? user.photoURL : defaultPfp},
           }}
         />
         <Text style={styles.textGreet}>Checkout the available features!</Text>
@@ -62,7 +63,7 @@ export default function Home({navigation}: HomeScreenProps) {
 
           <Animatable.Text
             style={styles.textGreet}
-            delay={features.length * 450}
+            delay={features.length * 300}
             animation={'fadeIn'}
             duration={400}>
             ... And many more to come!
