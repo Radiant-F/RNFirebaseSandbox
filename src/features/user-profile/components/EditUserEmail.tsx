@@ -1,12 +1,5 @@
-import {
-  Alert,
-  Button,
-  StyleSheet,
-  View,
-  AppState,
-  AppStateStatus,
-} from 'react-native';
-import React, {useCallback, useEffect, useState} from 'react';
+import {Alert, StyleSheet, View} from 'react-native';
+import React, {useState} from 'react';
 import {
   ButtonStyled,
   ModalComponent,
@@ -14,63 +7,41 @@ import {
 } from '../../../components';
 import FormInput from '../../../components/FormInput';
 import {useForm} from 'react-hook-form';
-import {useUpdateEmail, useUpdatePassword} from '../services/userProfileApi';
-import auth from '@react-native-firebase/auth';
-import {useFocusEffect} from '@react-navigation/native';
+import {useUpdateEmail} from '../services/userProfileApi';
 import {useAppSelector} from '../../../hooks';
 
 type UserEmailType = {
   newEmail: string;
-  password: string;
+  currentPassword: string;
 };
 
 export default function EditUserEmail() {
-  const user = auth().currentUser;
   const storedUser = useAppSelector(state => state.auth.user);
-  const {control, handleSubmit, watch, getValues} = useForm<UserEmailType>();
-  const [password, setPassword] = useState('');
-  const watchPassword = watch('password');
-
-  useEffect(() => {
-    console.log(watchPassword);
-  }, [watchPassword]);
+  const {control, handleSubmit} = useForm<UserEmailType>();
 
   const [visibleEditEmail, setVisibleEditEmail] = useState(false);
   const closeModalEditProfile = () => setVisibleEditEmail(false);
 
   const {loading, updateEmail} = useUpdateEmail();
 
-  const onUpdateEmail = async (data: UserEmailType) => {
-    await updateEmail(data.newEmail, data.password);
-    setVisibleEditEmail(false);
+  const onUpdateEmail = (data: UserEmailType) => {
+    Alert.alert(
+      'Attention',
+      'Verification link will be sent to your new email address and you will be signed out to manually re-authenticate with your new email. Continue?',
+      [
+        {text: 'Cancel'},
+        {
+          text: 'Continue',
+          onPress: async () => {
+            await updateEmail(data.newEmail, data.currentPassword);
+          },
+        },
+      ],
+    );
   };
 
-  async function onReauthenticate(password: string) {
-    try {
-      if (user && user.email != storedUser.email) {
-        const credential = auth.EmailAuthProvider.credential(
-          user.email!,
-          password,
-        );
-        await user?.reauthenticateWithCredential(credential);
-      }
-    } catch (error) {
-      console.log('error reauthenticating:', error);
-    }
-  }
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('focus', () =>
-      onReauthenticate(password),
-    );
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
   return (
-    <View style={{marginHorizontal: 20}}>
+    <View>
       <ButtonStyled
         onPress={() => setVisibleEditEmail(true)}
         title="Update Email"
@@ -98,13 +69,15 @@ export default function EditUserEmail() {
                   value: /^[\w.%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
                   message: 'Invalid format',
                 },
+                validate: newEmail =>
+                  newEmail != storedUser.email || 'Use different email',
               }}
             />
             <FormInput
               control={control}
               secureTextEntry={true}
-              fieldName="password"
-              fieldTitle="Confirm Password"
+              fieldName="currentPassword"
+              fieldTitle="Current Password"
               fieldIcon="lock-outline"
               autoCapitalize="none"
               placeholder="Your password..."
@@ -112,7 +85,6 @@ export default function EditUserEmail() {
             />
 
             <ButtonStyled
-              loading={loading}
               onPress={handleSubmit(onUpdateEmail)}
               style={{width: 120, alignSelf: 'center', marginTop: 10}}
               title="Update"
@@ -120,6 +92,7 @@ export default function EditUserEmail() {
           </View>
         }
       />
+      <ModalLoadingOverlay visible={loading} onRequestClose={() => null} />
     </View>
   );
 }
