@@ -10,17 +10,21 @@ export async function displayNotification(data: {
   sender_uid: string;
   sender_pfp: string;
   message: string;
+  chatId: string;
+  sender_fcm: string;
 }) {
   try {
     await notifee.displayNotification({
       title: data.sender_name,
       body: data.message,
-      id: 'chat-message',
+      id: data.sender_fcm,
       data: {
         sender_uid: data.sender_uid,
         sender_name: data.sender_name,
         sender_pfp: data.sender_name,
         message: data.message,
+        chatId: data.chatId,
+        sender_fcm: data.sender_fcm,
       },
       android: {
         channelId: 'chat-message',
@@ -45,7 +49,7 @@ export async function displayNotification(data: {
   }
 }
 
-async function sendMessage(text: string) {
+export async function sendMessage(text: string) {
   try {
     const currentChatScreen = localStorage.getString('current-chat-screen');
     if (!currentChatScreen)
@@ -79,23 +83,29 @@ async function sendMessage(text: string) {
     batch.update(chatRef, {
       lastMessage: text,
       lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
+      lastMessageSender: senderName,
     });
 
     await batch.commit();
 
-    const response = await fetch('http://10.0.2.2:3100/send-fcm', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        device_token: targetFcmToken,
-        data: {
-          sender_name: senderName,
-          sender_uid: senderUid,
-          sender_pfp: senderPfp,
-          message: text,
-        },
-      }),
-    });
+    const response = await fetch(
+      'https://fcm-test-hinqq0hau-radiants-projects-c6f86e6f.vercel.app/send-fcm',
+      {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          device_token: targetFcmToken,
+          data: {
+            sender_name: senderName,
+            sender_uid: senderUid,
+            sender_pfp: senderPfp,
+            message: text,
+            chatId,
+            sender_fcm: targetFcmToken,
+          },
+        }),
+      },
+    );
     const responseText = await response.text();
     console.log('localhost fcm sent from action press:', responseText);
   } catch (error) {
@@ -110,7 +120,7 @@ export function listenToForegroundNotificationEvent(
 ) {
   console.log('listening...');
   return notifee.onForegroundEvent(({detail, type}) => {
-    const notificationId = detail.notification?.id;
+    const notificationId = detail.notification?.android?.channelId;
     const pressActionId = detail.pressAction?.id;
     const notificationData = detail.notification
       ? detail.notification.data
@@ -118,8 +128,18 @@ export function listenToForegroundNotificationEvent(
 
     switch (type) {
       case EventType.DELIVERED:
-        if (notificationId == 'chat-message') {
+        if (notificationId == 'chat-message' && notificationData) {
           console.log('delivered:', notificationData);
+          localStorage.set(
+            'current-chat-screen',
+            JSON.stringify({
+              chatId: notificationData.chatId,
+              targetFcmToken: notificationData.fcmToken,
+              currentUid: currentUser.uid,
+              currentName: currentUser.displayName,
+              currentPfp: currentUser.photoURL,
+            }),
+          );
         }
         break;
       case EventType.ACTION_PRESS:
@@ -137,6 +157,9 @@ export function listenToForegroundNotificationEvent(
         if (notificationId == 'chat-message' && navigationRoot) {
           console.log('press:', notificationData);
         }
+        break;
+      default:
+        console.log('what the sigma');
         break;
     }
   });
