@@ -103,9 +103,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'black',
     borderColor: 'white',
     borderWidth: 3,
-    margin: 20,
+    marginBottom: 20,
     borderRadius: 20,
     overflow: 'hidden',
+    width: '90%',
+    maxWidth: 520,
+    alignSelf: 'center',
   },
   modalBackdrop: {
     position: 'absolute',
