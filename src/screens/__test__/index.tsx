@@ -7,10 +7,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import {useRef, useState} from 'react';
+import {useRef, useState, useMemo} from 'react';
 import Video, {VideoRef} from 'react-native-video';
 import * as Animatable from 'react-native-animatable';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import useFormatTime from '../../hooks/useFormatTime';
 
 type ControlsType = {
   currentTime: number;
@@ -19,12 +20,14 @@ type ControlsType = {
 
 export default function Demo() {
   const videoRef = useRef<VideoRef>(null);
-
   const [showControls, setShowControls] = useState<boolean>(false);
   const [controls, setControls] = useState<ControlsType>({
     currentTime: 0,
     playableDuration: 0,
   });
+  const formattedTime = useFormatTime(
+    Number(controls.currentTime.toFixed(0)) * 1000,
+  );
   const [paused, setPaused] = useState<boolean>(true);
   const [muted, setMuted] = useState<boolean>(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -100,7 +103,7 @@ export default function Demo() {
               />
             </TouchableOpacity>
             <View style={styles.viewBottomControl}>
-              <Text style={styles.textDuration}>{controls.currentTime}</Text>
+              <Text style={styles.textDuration}>{formattedTime}</Text>
               <View style={styles.containerSeek}>
                 <View style={[styles.seekCurrent, {marginLeft}]} />
               </View>
