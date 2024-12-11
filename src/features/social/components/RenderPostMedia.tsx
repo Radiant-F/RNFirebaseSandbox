@@ -25,7 +25,6 @@ export default function RenderPostMedia({
 }) {
   // video handler
   const videoRef = useRef<VideoRef>(null);
-  const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
 
   const mediaLength = mediaSource.length;
   const [visibleModalMedia, setVisibleModalMedia] = useState<string>('');
@@ -86,6 +85,7 @@ export default function RenderPostMedia({
 
   return (
     <View style={{...styles.container, marginVertical: margin}}>
+      {/* for only one media */}
       {mediaLength == 1 && (
         <TouchableNativeFeedback
           onPress={() =>
@@ -107,9 +107,7 @@ export default function RenderPostMedia({
                 style={{height: mediaHeight, width: '100%'}}
                 controls={true}
                 paused={true}
-                resizeMode={isVideoFullscreen ? 'contain' : 'cover'}
-                onFullscreenPlayerDidPresent={() => setIsVideoFullscreen(true)}
-                onFullscreenPlayerDidDismiss={() => setIsVideoFullscreen(false)}
+                resizeMode={'contain'}
                 controlsStyles={{
                   hideForward: true,
                   hideNext: true,
@@ -122,6 +120,7 @@ export default function RenderPostMedia({
         </TouchableNativeFeedback>
       )}
 
+      {/* for multiple media */}
       {mediaLength > 1 && (
         <>
           <ScrollView
@@ -152,15 +151,10 @@ export default function RenderPostMedia({
                       ref={videoRef}
                       source={{uri: v.url}}
                       style={{height: mediaHeight, width: '100%'}}
+                      // style={{height: '100%', width: '100%'}}
                       controls={true}
                       paused={true}
-                      resizeMode={isVideoFullscreen ? 'contain' : 'cover'}
-                      onFullscreenPlayerDidPresent={() =>
-                        setIsVideoFullscreen(true)
-                      }
-                      onFullscreenPlayerDidDismiss={() =>
-                        setIsVideoFullscreen(false)
-                      }
+                      resizeMode={'contain'}
                       controlsStyles={{
                         hideForward: true,
                         hideNext: true,
