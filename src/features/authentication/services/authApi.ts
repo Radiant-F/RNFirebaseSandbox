@@ -1,7 +1,7 @@
 import auth from '@react-native-firebase/auth';
 import {defaultPfp} from '../../../utils';
-import {clearCurrentUser, setCurrentUser, UserType} from '..';
-import {useAppDispatch, useAppSelector} from '../../../hooks';
+import {clearCurrentUser, setCurrentUser} from './authSlice';
+import {useAppDispatch} from '../../../hooks';
 import firestore from '@react-native-firebase/firestore';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -10,10 +10,10 @@ import {useDispatch} from 'react-redux';
 import {Alert} from 'react-native';
 import {GoogleSignin} from '@react-native-google-signin/google-signin';
 import {useState} from 'react';
+import {UserType} from '..';
 
 const dateISOString = new Date().toISOString();
-
-const defaultUser: UserType = {
+export const defaultUser: UserType = {
   uid: '',
   displayName: '',
   email: '',
