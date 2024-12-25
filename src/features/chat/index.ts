@@ -1,5 +1,6 @@
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../routes/type';
+import {FirebaseFirestoreTypes} from '@react-native-firebase/firestore';
 
 export type ChatScreenProps = NativeStackScreenProps<
   RootStackParamList,
@@ -23,10 +24,12 @@ export type ChatListType = {
   members: string[];
   lastMessage: string;
   lastMessageTimestamp: FirebaseFirestoreTypes.Timestamp;
+  lastMessageSender: string;
   createdAt: FirebaseFirestoreTypes.Timestamp;
   otherUser: {
     displayName: string;
-    photo: string;
+    photoURL: string;
+    fcmToken: string;
   };
 };
 
@@ -59,7 +62,7 @@ import InputMessage from './components/InputMessage';
 import ContactListPending from './components/ContactListPending';
 import ContactListDeclined from './components/ContactListDeclined';
 import RenderChatList from './components/RenderChatList';
-import {FirebaseFirestoreTypes} from '@react-native-firebase/firestore';
+import NotificationPermission from './components/NotificationPermission';
 export {
   RenderSearchContact,
   ContactListRequest,
@@ -69,4 +72,5 @@ export {
   InputMessage,
   ContactListDeclined,
   RenderChatList,
+  NotificationPermission,
 };
