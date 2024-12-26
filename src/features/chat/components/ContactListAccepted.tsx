@@ -2,10 +2,6 @@ import {FlatList, Image, StyleSheet, Text, View} from 'react-native';
 import React, {useState} from 'react';
 import {ButtonStyled, Gap} from '../../../components';
 import {useGetContacts, useGetOrStartChat} from '../services/chatApi';
-import {useAppSelector} from '../../../hooks';
-import {useNavigation} from '@react-navigation/native';
-import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {RootStackParamList} from '../../../routes/type';
 
 export default function ContactListAccepted() {
   const {contacts} = useGetContacts('accepted');
