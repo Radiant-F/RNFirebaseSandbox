@@ -11,8 +11,12 @@ import {
   PostCreate,
   PostUpdate,
   PostDetail,
+  Chat,
+  SearchUser,
+  ContactList,
+  ChatScreen,
 } from '../screens';
-import {RootStackParamList} from './types';
+import {RootStackParamList} from './type';
 import {FirebaseAuthTypes} from '@react-native-firebase/auth';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -29,6 +33,7 @@ export default function RootStack({
         animation: 'fade',
         contentStyle: {backgroundColor: 'transparent'},
       }}
+      // initialRouteName={'Demo'}
       initialRouteName={user ? 'Home' : 'Authentication'}>
       <Stack.Screen name="Splash" component={Splash} />
       <Stack.Screen name="Demo" component={Demo} />
@@ -44,6 +49,13 @@ export default function RootStack({
         <Stack.Screen name="PostCreate" component={PostCreate} />
         <Stack.Screen name="PostUpdate" component={PostUpdate} />
         <Stack.Screen name="PostDetail" component={PostDetail} />
+      </Stack.Group>
+
+      <Stack.Group>
+        <Stack.Screen name="Chat" component={Chat} />
+        <Stack.Screen name="SearchUser" component={SearchUser} />
+        <Stack.Screen name="ContactList" component={ContactList} />
+        <Stack.Screen name="ChatScreen" component={ChatScreen} />
       </Stack.Group>
     </Stack.Navigator>
   );
