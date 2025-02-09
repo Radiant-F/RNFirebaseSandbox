@@ -8,18 +8,21 @@ import {
 } from 'react-native';
 import React, {useState} from 'react';
 import {PostType, useDeletePost} from '..';
-import {useAppSelector, useTimeAgo} from '../../../hooks';
+import {useAppDispatch, useAppSelector, useTimeAgo} from '../../../hooks';
 import {Gap, ModalBottomAction} from '../../../components';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../../routes/type';
 import RenderPostMedia from './RenderPostMedia';
+import {setViewablePostIndex} from '../services/socialSlice';
 
 type RenderPostType = {
   item: PostType;
+  index: number;
 };
-export default function RenderPost({item}: RenderPostType) {
+export default function RenderPost({item, index}: RenderPostType) {
+  const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth.user);
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -41,25 +44,13 @@ export default function RenderPost({item}: RenderPostType) {
 
   const mediaLength = item.mediaUrl.length;
 
-  [
-    {
-      fileType: 'image/jpeg',
-      url: 'https://firebasestorage.googleapis.com/v0/b/fauthdemo-4d043.appspot.com/o/users%2F3wdF5FguUPWJderl2mAwWbxW5NP2%2Fposts%2F1000005971.jpg_902754195627?alt=media&token=81b0abff-acaa-4ece-91b9-af867378be0e',
-    },
-    {
-      fileType: 'image/jpeg',
-      url: 'https://firebasestorage.googleapis.com/v0/b/fauthdemo-4d043.appspot.com/o/users%2F3wdF5FguUPWJderl2mAwWbxW5NP2%2Fposts%2F1000006011.jpg_161959488674?alt=media&token=0a95afb7-d4db-43fe-83e4-38dc576506df',
-    },
-    {
-      fileType: 'video/mp4',
-      url: 'https://firebasestorage.googleapis.com/v0/b/fauthdemo-4d043.appspot.com/o/users%2F3wdF5FguUPWJderl2mAwWbxW5NP2%2Fposts%2F1000005982.mp4_1378923533660?alt=media&token=62a4fb8b-8477-4da9-b414-bd1a802e6d0b',
-    },
-  ];
-
   return (
     <TouchableNativeFeedback
       background={TouchableNativeFeedback.Ripple('#ffffff1a', false)}
-      onPress={() => navigation.navigate('PostDetail', item)}>
+      onPress={() => {
+        dispatch(setViewablePostIndex(null));
+        navigation.navigate('PostDetail', item);
+      }}>
       <View style={styles.container}>
         {/* post header */}
         <View style={styles.viewPostHeader}>
@@ -113,7 +104,9 @@ export default function RenderPost({item}: RenderPostType) {
 
         {/* post media */}
         <Gap height={mediaLength != 0 ? 5 : 0} />
-        {mediaLength != 0 && <RenderPostMedia mediaSource={item.mediaUrl} />}
+        {mediaLength != 0 && (
+          <RenderPostMedia mediaSource={item.mediaUrl} postIndex={index} />
+        )}
 
         <Gap height={10} />
 
