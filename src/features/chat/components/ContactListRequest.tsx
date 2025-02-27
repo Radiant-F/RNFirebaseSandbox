@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   StyleSheet,
@@ -19,7 +20,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 export default function ContactListRequest() {
   const storedUser = useAppSelector(state => state.auth.user);
   const {contacts} = useRealtimeGetContacts('requested');
-  const {respondToRequest, loading: responding} = useRespondToContactRequest();
+  const {respondToRequest} = useRespondToContactRequest();
+
   const [loadingIndicator, setLoadingIndicator] = useState<{
     index: number | null;
     type: '' | 'accept' | 'decline';
@@ -37,6 +39,8 @@ export default function ContactListRequest() {
       }
       data={contacts}
       renderItem={({item, index}) => {
+        const loading = index == loadingIndicator.index;
+
         return (
           <View style={styles.viewContact}>
             <View style={{flexDirection: 'row', alignItems: 'center'}}>
@@ -69,8 +73,18 @@ export default function ContactListRequest() {
                   await respondToRequest(storedUser.uid, item, 'declined');
                   setLoadingIndicator({index: null, type: ''});
                 }}>
-                <Icon name="close-circle-outline" color={'white'} size={20} />
-                <Text style={styles.textRespond}>Decline</Text>
+                {loading && loadingIndicator.type == 'decline' ? (
+                  <ActivityIndicator color={'white'} size={'small'} />
+                ) : (
+                  <>
+                    <Icon
+                      name="close-circle-outline"
+                      color={'white'}
+                      size={20}
+                    />
+                    <Text style={styles.textRespond}>Decline</Text>
+                  </>
+                )}
               </TouchableOpacity>
               <Gap width={10} />
               <TouchableOpacity
@@ -81,8 +95,18 @@ export default function ContactListRequest() {
                   await respondToRequest(storedUser.uid, item, 'accepted');
                   setLoadingIndicator({index: null, type: ''});
                 }}>
-                <Icon name="check-circle-outline" color={'white'} size={20} />
-                <Text style={styles.textRespond}>Accept</Text>
+                {loading && loadingIndicator.type == 'accept' ? (
+                  <ActivityIndicator color={'white'} size={'small'} />
+                ) : (
+                  <>
+                    <Icon
+                      name="check-circle-outline"
+                      color={'white'}
+                      size={20}
+                    />
+                    <Text style={styles.textRespond}>Accept</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -107,7 +131,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    width: 110,
   },
   textEmpty: {
     textAlign: 'center',
@@ -135,6 +159,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff1a',
     borderRadius: 20,
     padding: 20,
+    marginBottom: 10,
   },
   viewImage: {
     borderRadius: 60 / 2,
