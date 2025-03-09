@@ -5,7 +5,7 @@ import {
   useCompareFcmToken,
   useInitializeNotification,
 } from '../services/chatApi';
-import {useAppSelector, useUserSnapshot} from '../../../hooks';
+import {useAppDispatch, useAppSelector, useUserSnapshot} from '../../../hooks';
 import {Button} from 'react-native';
 import {
   displayNotification,
@@ -14,9 +14,14 @@ import {
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../../routes/type';
+import {setNotificationForegroundStatus} from '../services/chatSlice';
 
 export default function NotificationPermission() {
+  const dispatch = useAppDispatch();
   const storedUser = useAppSelector(state => state.auth.user);
+  const foregroundStatus = useAppSelector(
+    state => state.chat.notification_foreground_status,
+  );
   const [visibleBottomAction, setVisibleBottomAction] = useState(false);
   const closeBottomAction = () => setVisibleBottomAction(false);
 
@@ -31,7 +36,15 @@ export default function NotificationPermission() {
 
   useEffect(() => {
     if (!hasInitPermission) setVisibleBottomAction(true);
-    else compareFcmToken();
+    else {
+      // compare fcm token is required for new device
+      compareFcmToken();
+      // check whether notification foreground event is triggered or not
+      if (foregroundStatus == 'inactive') {
+        listenToForegroundNotificationEvent(navigation, storedUser);
+        dispatch(setNotificationForegroundStatus('active'));
+      }
+    }
   }, []);
 
   const {initializeNotification} = useInitializeNotification();
@@ -56,7 +69,7 @@ export default function NotificationPermission() {
       <ModalBottomAction
         onRequestClose={closeBottomAction}
         visible={visibleBottomAction}
-        title="Do you want to recieve notification for incoming chat? This is a Work in Progress feature."
+        title="Do you want to recieve notification for incoming chat? This is a Work in Progress feature pls work kek amogus"
         buttons={[
           {
             icon: 'bell-check-outline',
