@@ -10,19 +10,45 @@ import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../../routes/type';
 import {Gap} from '../../../components';
+import {localStorage} from '../../../utils';
+import {useAppSelector} from '../../../hooks';
 
 export default function RenderChatList({item}: {item: ChatListType}) {
+  const storedUser = useAppSelector(state => state.auth.user);
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const lastMessageTimestamp = item.lastMessageTimestamp
-    .toDate()
+    ?.toDate()
     .toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
 
+  function onNavigateToChatScreen() {
+    navigation.navigate('ChatScreen', {
+      chatId: item.id,
+      targetFcmToken: item.otherUser.fcmToken,
+      chat_name: item.otherUser.displayName,
+    });
+    localStorage.set(
+      'current-chat-screen',
+      JSON.stringify({
+        chatId: item.id,
+        targetFcmToken: item.otherUser.fcmToken,
+        currentUid: storedUser.uid,
+        currentName: storedUser.displayName,
+        currentPfp: storedUser.photoURL,
+      }),
+    );
+  }
+
+  const lastMessageSender =
+    item?.lastMessageSender == storedUser.displayName
+      ? 'You: '
+      : item?.lastMessageSender
+      ? `${item?.lastMessageSender}: `
+      : '';
+
   return (
-    <TouchableNativeFeedback
-      useForeground
-      onPress={() => navigation.navigate('ChatScreen', {chatId: item.id})}>
+    <TouchableNativeFeedback useForeground onPress={onNavigateToChatScreen}>
       <View style={styles.btnChatContainer}>
         <Image
           source={{uri: item.otherUser.photoURL}}
@@ -35,6 +61,7 @@ export default function RenderChatList({item}: {item: ChatListType}) {
             {item.otherUser.displayName}
           </Text>
           <Text style={styles.textLastMessage} numberOfLines={1}>
+            {lastMessageSender}
             {item.lastMessage}
           </Text>
         </View>
