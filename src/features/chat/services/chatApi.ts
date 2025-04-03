@@ -1,7 +1,11 @@
 import {useEffect, useState} from 'react';
 import firestore from '@react-native-firebase/firestore';
-import {useAppSelector} from '../../../hooks';
-import {UserType} from '../../authentication';
+import {
+  useAppDispatch,
+  useAppSelector,
+  useGetCurrentUser,
+} from '../../../hooks';
+import {setCurrentUser} from '../../authentication/services/authSlice';
 import {Alert} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -10,7 +14,10 @@ import {ChatListType} from '..';
 import messaging from '@react-native-firebase/messaging';
 import {notificationCreateChannel, notificationRequest} from '../../../utils';
 import {localStorage} from '../../../utils';
-
+import notifee, {AuthorizationStatus} from '@notifee/react-native';
+import {listenToForegroundNotificationEvent} from './notifee';
+import {UserType} from '../../authentication';
+import {setNotificationForegroundStatus} from './chatSlice';
 type ContactType = {
   createdAt: string;
   displayName: string;
@@ -302,6 +309,7 @@ export function useGetOrStartChat() {
           createdAt: firestore.FieldValue.serverTimestamp(),
           lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
           lastMessage: '',
+          lastMessageSender: '',
           // lastMessage: {
           //   text: '',
           //   sender: '',
@@ -311,7 +319,13 @@ export function useGetOrStartChat() {
         chatId = newChat.id;
       }
 
-      navigation.replace('ChatScreen', {chatId});
+      const contactDetail = await fetchUserDetails(contactId);
+
+      navigation.replace('ChatScreen', {
+        chatId,
+        targetFcmToken: contactDetail.fcmToken as string,
+        chat_name: contactDetail.displayName,
+      });
     } catch (error) {
       setLoading(false);
       console.log('error getting or starting chat:', error);
@@ -325,13 +339,13 @@ async function fetchUserDetails(uid: string) {
   try {
     const userDoc = await firestore().collection('users').doc(uid).get();
     if (userDoc.exists) {
-      const {displayName, photoURL} = userDoc.data() as UserType;
-      return {displayName, photoURL};
+      const {displayName, photoURL, fcmToken} = userDoc.data() as UserType;
+      return {displayName, photoURL, fcmToken};
     }
   } catch (error) {
     console.error('Error fetching user details:', error);
   }
-  return {displayName: 'Unknown', photoURL: null}; // Default fallback
+  return {displayName: 'Unknown', photoURL: null, fcmToken: ''}; // Default fallback
 }
 
 export function useOldChatList() {
@@ -432,10 +446,17 @@ export function useMessages(chatId: string) {
   return {messages};
 }
 
+type SendMessageType = {
+  senderUid: string;
+  senderName: string;
+  senderPfp: string;
+  targetFcmToken: string;
+  text: string;
+};
 export function useSendMessage(chatId: string) {
   const [loading, setLoading] = useState(false);
 
-  async function sendMessage(senderId: string, text: string) {
+  async function sendMessage(args: SendMessageType) {
     setLoading(true);
     try {
       const messageRef = firestore()
@@ -449,18 +470,40 @@ export function useSendMessage(chatId: string) {
 
       // use a Firestore batch to atomically write both the message and update the chat
       batch.set(messageRef, {
-        senderId,
-        text,
+        senderId: args.senderUid,
+        text: args.text,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
 
       // update chat last message and mesage timestamp
       batch.update(chatRef, {
-        lastMessage: text,
+        lastMessage: args.text,
         lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
+        lastMessageSender: args.senderName,
       });
 
       await batch.commit();
+
+      const response = await fetch(
+        'https://fcm-test-hinqq0hau-radiants-projects-c6f86e6f.vercel.app/send-fcm',
+        {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            device_token: args.targetFcmToken,
+            data: {
+              sender_name: args.senderName,
+              sender_uid: args.senderUid,
+              sender_pfp: args.senderPfp,
+              message: args.text,
+              sender_fcm: args.targetFcmToken,
+              chatId,
+            },
+          }),
+        },
+      );
+      const responseText = await response.text();
+      console.log('localhost fcm sent:', responseText);
 
       // await chatRef.add({
       //   senderId,
@@ -494,12 +537,18 @@ export async function getFcmToken(): Promise<string> {
 }
 
 export function useInitializeNotification() {
+  const dispatch = useAppDispatch();
   const storedUser = useAppSelector(state => state.auth.user);
+
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   async function initializeNotification() {
     try {
       await notificationRequest();
       await notificationCreateChannel('chat-message', 'Chat');
+
+      listenToForegroundNotificationEvent(navigation, storedUser);
 
       const fcmToken = await getFcmToken();
 
@@ -508,6 +557,10 @@ export function useInitializeNotification() {
         .doc(storedUser.uid)
         .update({fcmToken});
 
+      const user = await useGetCurrentUser(storedUser.uid);
+      dispatch(setCurrentUser(user));
+
+      dispatch(setNotificationForegroundStatus('active'));
       localStorage.set('init-permission-notification', true);
     } catch (error) {
       console.log('error initializing notification:', error);
@@ -518,18 +571,31 @@ export function useInitializeNotification() {
 }
 
 export function useCompareFcmToken() {
+  const dispatch = useAppDispatch();
   const storedUser = useAppSelector(state => state.auth.user);
 
   async function compareFcmToken() {
     try {
       const deviceFcmToken = await getFcmToken();
-      if (storedUser.fcmToken != '' && deviceFcmToken != storedUser.fcmToken) {
+      const settings = await notifee.requestPermission();
+
+      if (
+        settings.authorizationStatus != AuthorizationStatus.DENIED &&
+        deviceFcmToken != storedUser.fcmToken
+      ) {
         await firestore()
           .collection('users')
           .doc(storedUser.uid)
           .update({fcmToken: deviceFcmToken});
+
+        const user = await useGetCurrentUser(storedUser.uid);
+        dispatch(setCurrentUser(user));
+
+        console.log('user fcm token updated.');
       }
-    } catch (error) {}
+    } catch (error) {
+      console.log('error comparing fcm token:', error);
+    }
   }
 
   return {compareFcmToken};
