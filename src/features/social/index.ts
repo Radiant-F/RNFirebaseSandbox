@@ -42,6 +42,7 @@ export type MediaFileType = {
   fileType: string;
 };
 
+// hooks
 import {
   useSocialPosts,
   useCreatePost,
@@ -57,8 +58,13 @@ export {
   useSocialPostsPersonal,
 };
 
+// components
 import RenderPost from './components/RenderPost';
 import ProfileHeader from './components/ProfileHeader';
 import RenderPostDetail from './components/RenderPostDetail';
 import {UserType} from '../authentication';
 export {RenderPost, ProfileHeader, RenderPostDetail};
+
+// redux actions
+import {setViewablePostIndex} from './services/socialSlice';
+export {setViewablePostIndex};
